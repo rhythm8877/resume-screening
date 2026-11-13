@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resume Screening</title><link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="container">
+    <header class="header"><a class="logo" href="/">Resume Screening</a><span class="tag">STUDENT PROJECT</span></header>
+    <section class="intro"><p class="kicker">A CLEARER FIRST REVIEW</p><h1>Compare a resume<br>with a role.</h1><p class="lead">See which stated skills appear in the resume, with short text snippets as evidence. This is a simple keyword comparison, not a hiring decision.</p></section>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <form class="card form" action="/analyze" method="post" enctype="multipart/form-data">
+      <div class="card-heading"><span class="number">01</span><div><h2>Job details</h2><p>Tell us what the role asks for.</p></div></div>
+      <label>Job title<input name="job_title" required maxlength="200" placeholder="e.g. Junior Data Analyst" value="{{ form.get('job_title', '') }}"></label>
+      <label>Job description<textarea name="job_description" rows="7" required minlength="20" placeholder="Paste the job description…">{{ form.get('job_description', '') }}</textarea></label>
+      <label>Key skills <span class="optional">optional · comma separated</span><input name="requirements" maxlength="2000" placeholder="SQL, Excel, communication" value="{{ form.get('requirements', '') }}"><small>When left blank, the app looks for common skills in the job description.</small></label>
+      <div class="card-heading resume-heading"><span class="number">02</span><div><h2>Resume</h2><p>PDF or DOCX, maximum 10 MB.</p></div></div>
+      <label class="file-label">Choose one resume<input type="file" name="resume" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required></label>
+      <button class="primary" type="submit">Compare resume <span>→</span></button>
+      <p class="privacy">Resume files are processed locally and removed after analysis. The saved report contains only skill matches and evidence snippets.</p>
+    </form>
+    {% if history %}<section class="history"><h2>Recent reports</h2>{% for item in history %}<a class="history-row" href="/analysis/{{ item['id'] }}"><span><strong>{{ item['job_title'] }}</strong><small>{{ item['filename'] }}</small></span><span class="arrow">→</span></a>{% endfor %}</section>{% endif %}
+    <footer>Simple, explainable keyword matching · No employment predictions</footer>
+  </main>
+</body>
+</html>
