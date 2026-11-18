@@ -7,3 +7,6 @@ node_modules/
 .next/
 frontend/.next/
 .DS_Store
+
+# Local frontend environment variables
+frontend/.env.local

@@ -8,7 +8,7 @@ from app.db import claim_task, fail_task, initialize, save_deep_analysis, save_s
 from app.evidence import inspect_projects, retryable_evidence_error
 from app.jev import JevError
 from app.resume import extract_job_terms, extract_project_links, extract_resume_text
-from app.screening import evaluate_resume
+from app.screening import ProviderFactory, ScreeningProvider
 
 
 def _project_adjustment(external: list[dict]) -> float:
@@ -35,7 +35,7 @@ def _project_adjustment(external: list[dict]) -> float:
     return round(bonus - review_adjustment, 1)
 
 
-def _process(task: dict):
+def _process(task: dict, screening_provider: ScreeningProvider):
     context = task_context(task)
     batch = context["batch"]
     candidate = context["candidate"]
@@ -47,15 +47,16 @@ def _process(task: dict):
             resume_text = extract_resume_text(Path(path))
             project_claims = extract_project_links(resume_text)
             project_urls = list(dict.fromkeys(item["url"] for item in project_claims))
-            result = evaluate_resume(batch["title"], batch["job_description"], resume_text, batch["criteria"] or [])
-            result["project_claims"] = project_claims
+            result = screening_provider.evaluate(batch["title"], batch["job_description"], resume_text, batch["criteria"] or [])
+            findings = result.to_payload()
+            findings["project_claims"] = project_claims
             save_screening(
-                task, result["score_percent"], result["meets_minimum_probability"],
-                result["score_confidence"], result["model"], result["input_tokens"], result, project_urls,
-                result["mandatory_probability"], result["mandatory_pass"],
-                result["stack_match"], result["equivalent_match"],
+                task, result.score_percent, result.meets_minimum_probability,
+                result.score_confidence, result.model, result.input_tokens, findings, project_urls,
+                result.mandatory_probability, result.mandatory_pass,
+                result.stack_match, result.equivalent_match,
             )
-            print(f"batch {task['batch_id'][:8]}: {result['model']} screened candidate {candidate['id'][:8]} ({result['score_percent']:.1f})")
+            print(f"batch {task['batch_id'][:8]}: {result.model} screened candidate {candidate['id'][:8]} ({result.score_percent:.1f})")
             return
 
         if task["stage"] == "deep":
@@ -96,14 +97,14 @@ def _process(task: dict):
         print(f"task {task['id']}: failed ({error_code})")
 
 
-def _worker_loop(number: int, poll_seconds: float, stop: Event):
+def _worker_loop(number: int, poll_seconds: float, stop: Event, screening_provider: ScreeningProvider):
     while not stop.is_set():
         task = claim_task()
         if task is None:
             stop.wait(poll_seconds)
             continue
         print(f"worker {number}: {task['stage']} task {task['id']} attempt {task['attempts']}")
-        _process(task)
+        _process(task, screening_provider)
 
 
 def main():
@@ -114,10 +115,12 @@ def main():
     if not 1 <= args.workers <= 8:
         parser.error("--workers must be between 1 and 8")
     initialize()
+    screening_provider = ProviderFactory.create()
     print(f"Resume screening worker ready ({args.workers} worker(s)). Press Ctrl+C to stop.")
     stop = Event()
     pool = ThreadPoolExecutor(max_workers=args.workers)
-    futures = [pool.submit(_worker_loop, number + 1, args.poll_seconds, stop) for number in range(args.workers)]
+    futures = [pool.submit(_worker_loop, number + 1, args.poll_seconds, stop, screening_provider)
+               for number in range(args.workers)]
     try:
         while True:
             time.sleep(0.5)
